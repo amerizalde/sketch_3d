@@ -35,6 +35,7 @@ def grease_to_curve(context):
 
     bpy.ops.gpencil.convert(type='PATH', use_timing_data=True)
     bpy.ops.gpencil.layer_remove()
+    context.scene.grease_pencil = context.active_object.grease_pencil
     context.scene.objects.active = context.selected_objects[0]
     
     # beautify the curve
@@ -82,7 +83,6 @@ class SketchOperator(Operator):
     bl_label = "Create a new sketch object/ continue sketching"
 
     def execute(self, context):
-
         if "sketch_object" not in [o.name for o in bpy.data.objects.values()]:
             if context.object:
                 bpy.ops.object.mode_set(mode = 'OBJECT')
@@ -125,6 +125,7 @@ class SketchOperator(Operator):
             context.scene.objects.active = bpy.data.objects["sketch_object"]
             bpy.ops.object.mode_set(mode='EDIT')
 
+        context.scene.grease_pencil = context.active_object.grease_pencil
         self.report({"INFO"}, "Sketch Mode.")
         return {'FINISHED'}
 
@@ -136,15 +137,32 @@ class CurveOperator(Operator):
     @classmethod
     def poll(cls, context):
 
-        if context.scene.grease_pencil != None:
-            if context.scene.grease_pencil.layers != None:
-                return context.scene.grease_pencil.layers.active_index != -1
+        result = context.active_object
+        if result is None:
+            return False
+            
+        result = result.grease_pencil
+        if result is None:
+            return False
+            
+        result = result.layers
+        if result is None:
+            return False
+        
+        result = result.active_index
+        if result is -1:
+            return False
+            
+        result = result.active_frame
+        if result is -1:
+            return False
+            
+        result = result.strokes.values()
+        if result is None:
+            return False
+            
+        return True
 
-        if context.active_object != None:
-            if context.active_object.grease_pencil != None:
-                if context.active_object.grease_pencil.layers != None:
-                    return context.active_object.grease_pencil.layers.active_index != -1
-        return False
     
     def execute(self, context):
         grease_to_curve(context)
@@ -157,10 +175,21 @@ class MeshOperator(Operator):
     
     @classmethod
     def poll(cls, context):
-        return 'GP_Layer' in [o.name for o in context.selectable_objects]
+        return 0 in [o.name.find('GP_Layer') for o in context.selectable_objects]
     
     def execute(self, context):
         curve_to_mesh(context)
+        return {'FINISHED'}
+
+
+class CursorReset(Operator):
+
+    bl_idname = "alm.reset_cursor"
+    bl_label = "Reset cursor to center"
+        
+    def execute(self, context):
+        bpy.ops.view3d.snap_cursor_to_center()
+        bpy.ops.view3d.view_center_cursor()
         return {'FINISHED'}
 
 
@@ -191,8 +220,11 @@ class AddonPanel(Panel):
 
         row = layout.row()
         row.operator("alm.view_locker", text='Lock View')
+        
+        row = layout.row()
+        row.operator("alm.reset_cursor", text='Reset Cursor')
 
-classes = [ViewLocker, SketchOperator, CurveOperator, MeshOperator, AddonPanel]
+classes = [ViewLocker, SketchOperator, CurveOperator, MeshOperator, CursorReset, AddonPanel]
 
 def register():
     for c in classes:
